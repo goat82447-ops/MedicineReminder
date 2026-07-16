@@ -122,6 +122,16 @@ public sealed class ReminderRepository : IReminderRepository
 
     private async Task WriteAllUnlockedAsync(List<ReminderItem> reminders, CancellationToken cancellationToken)
     {
+        // Defensive: if _filePath points at a disk mount (REMINDERS_FILE_PATH)
+        // whose parent directory doesn't exist yet (e.g. no persistent disk
+        // attached on the hosting platform), create it instead of throwing
+        // DirectoryNotFoundException.
+        string? directory = Path.GetDirectoryName(_filePath);
+        if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         await using FileStream stream = File.Create(_filePath);
         await JsonSerializer.SerializeAsync(stream, reminders, SerializerOptions, cancellationToken).ConfigureAwait(false);
     }
