@@ -72,8 +72,11 @@ public sealed class ReminderSender : IReminderSender
         // All date/time matching is done in UTC, matching the GitHub Actions
         // cron schedule (which is always UTC), so behavior is identical
         // whether run via CLI, GitHub Actions, or the in-process scheduler.
+        // Reminders are emailed on their own ReminderDate (not the day
+        // before), at the reminder's chosen time, accurate to within the
+        // current 30-minute window.
         DateTime nowUtc = DateTime.UtcNow;
-        DateOnly tomorrow = DateOnly.FromDateTime(nowUtc.AddDays(1));
+        DateOnly today = DateOnly.FromDateTime(nowUtc);
         int nowMinutesOfDay = nowUtc.Hour * 60 + nowUtc.Minute;
         int windowStartMinutes = nowMinutesOfDay / DailyWindowMinutes * DailyWindowMinutes;
         int windowEndMinutes = windowStartMinutes + DailyWindowMinutes;
@@ -85,7 +88,7 @@ public sealed class ReminderSender : IReminderSender
         }
 
         List<ReminderItem> dueReminders = reminders
-            .Where(reminder => reminder.ReminderDate == tomorrow
+            .Where(reminder => reminder.ReminderDate == today
                 && IsValid(reminder)
                 && IsInCurrentWindow(reminder.ReminderTime))
             .ToList();
@@ -93,14 +96,14 @@ public sealed class ReminderSender : IReminderSender
         if (dueReminders.Count == 0)
         {
             _logger.LogInformation(
-                "No reminders due for {Tomorrow:yyyy-MM-dd} in the {WindowStart}-{WindowEnd} UTC window. Nothing to send.",
-                tomorrow,
+                "No reminders due for {Today:yyyy-MM-dd} in the {WindowStart}-{WindowEnd} UTC window. Nothing to send.",
+                today,
                 $"{windowStartMinutes / 60:D2}:{windowStartMinutes % 60:D2}",
                 $"{windowEndMinutes / 60:D2}:{windowEndMinutes % 60:D2}");
             return true;
         }
 
-        _logger.LogInformation("{Count} reminder(s) due for {Tomorrow:yyyy-MM-dd}.", dueReminders.Count, tomorrow);
+        _logger.LogInformation("{Count} reminder(s) due for {Today:yyyy-MM-dd}.", dueReminders.Count, today);
 
         bool allSucceeded = true;
 
