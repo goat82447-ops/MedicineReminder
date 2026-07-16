@@ -1,0 +1,54 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys MedicineReminder as a single, always-on web service that:
+#   - Serves the --mode=dashboard UI (protected by HTTP Basic Auth) to
+#     add/view/delete reminders, backed by a persistent disk so
+#     reminders.json survives deploys/restarts.
+#   - Runs the medicine/daily reminder checks internally on a 30-minute
+#     timer (Scheduler__Enabled=true) instead of separate cron jobs, since
+#     Render cron jobs cannot access a persistent disk shared with this
+#     service (see https://render.com/docs/disks#disk-limitations-and-considerations).
+#
+# Before/after deploying, set the sync:false values below (SENDER_EMAIL,
+# GMAIL_APP_PASSWORD equivalents, etc.) in the Render Dashboard — never
+# commit real secrets to this file. If you fully migrate to this service,
+# disable the "schedule:" triggers in .github/workflows/*.yml to avoid
+# duplicate reminder emails from both GitHub Actions and Render.
+services:
+  - type: web
+    name: medicine-reminder
+    runtime: docker
+    plan: starter
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: Scheduler__Enabled
+        value: "true"
+      - key: REMINDERS_FILE_PATH
+        value: /data/reminders.json
+      - key: Dashboard__Username
+        value: admin
+      - key: Dashboard__Password
+        sync: false
+      - key: EmailSettings__SmtpServer
+        value: smtp.gmail.com
+      - key: EmailSettings__SmtpPort
+        value: "587"
+      - key: EmailSettings__EnableSsl
+        value: "true"
+      - key: EmailSettings__SenderEmail
+        sync: false
+      - key: EmailSettings__SenderPassword
+        sync: false
+      - key: EmailSettings__ReceiverEmail
+        sync: false
+      - key: MedicineSettings__MedicineName
+        sync: false
+      - key: MedicineSettings__ReminderMessage
+        sync: false
+    disk:
+      name: medicine-reminder-data
+      mountPath: /data
+      sizeGB: 1
