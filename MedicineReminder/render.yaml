@@ -1,56 +1,67 @@
-name: Daily Reminder Email (reminders.json)
-
-# ---------------------------------------------------------------------------
-# Runs automatically every 30 minutes. Loads reminders.json (the "portal" —
-# add/edit entries there, no code changes needed) and emails any reminder
-# whose date is today AND whose reminderTime (UTC) falls in the current
-# 30-minute window — so each reminder is sent close to its chosen time,
-# accurate to within ~30 minutes. Separate from the fixed monthly medicine
-# reminder in medicine-reminder.yml. Can also be run on-demand via
-# workflow_dispatch.
+# Render Blueprint — https://render.com/docs/blueprint-spec
 #
-# NOTE on GitHub Actions minutes: running every 30 minutes is ~48 runs/day
-# (~1440/month). Public repos get unlimited free minutes; private repos on
-# the Free plan get 2,000 free minutes/month. Each run typically takes under
-# a minute, but GitHub bills whole minutes per job, so this can consume a
-# meaningful share of a private repo's free quota. Increase the cron
-# interval (e.g. "0,30 * * * *" -> "0 * * * *" for hourly) if you hit limits
-# or don't need 30-minute precision.
-# ---------------------------------------------------------------------------
-on:
-  schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch: {}
-
-permissions:
-  contents: read
-
-jobs:
-  send-daily-reminders:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "8.0.x"
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Run Daily Reminder
-        run: dotnet run --configuration Release --no-build -- --mode=daily
-        env:
-          EmailSettings__SmtpServer: smtp.gmail.com
-          EmailSettings__SmtpPort: 587
-          EmailSettings__EnableSsl: true
-          EmailSettings__SenderEmail: ${{ secrets.SENDER_EMAIL }}
-          EmailSettings__SenderPassword: ${{ secrets.GMAIL_APP_PASSWORD }}
-          EmailSettings__ReceiverEmail: ${{ secrets.RECEIVER_EMAIL }}
+# Deploys MedicineReminder as a single, always-on web service that:
+#   - Serves the --mode=dashboard UI (protected by HTTP Basic Auth) to
+#     add/view/delete reminders, backed by a persistent disk so
+#     reminders.json survives deploys/restarts.
+#   - Runs the medicine/daily reminder checks internally on a 30-minute
+#     timer (Scheduler__Enabled=true) instead of separate cron jobs, since
+#     Render cron jobs cannot access a persistent disk shared with this
+#     service (see https://render.com/docs/disks#disk-limitations-and-considerations).
+#
+# Before/after deploying, set the sync:false values below (SENDER_EMAIL,
+# GMAIL_APP_PASSWORD equivalents, etc.) in the Render Dashboard — never
+# commit real secrets to this file. If you fully migrate to this service,
+# disable the "schedule:" triggers in .github/workflows/*.yml to avoid
+# duplicate reminder emails from both GitHub Actions and Render.
+services:
+  - type: web
+    name: medicine-reminder
+    runtime: docker
+    plan: starter
+    region: oregon
+    # Set this if your GitHub repo has the project nested in a subfolder
+    # (e.g. https://github.com/<user>/MedicineReminder/tree/main/MedicineReminder
+    # means the repo root contains a "MedicineReminder" folder with the
+    # Dockerfile/csproj in it). Remove this line if Dockerfile/csproj are
+    # actually at the repo root.
+    rootDir: MedicineReminder
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: Scheduler__Enabled
+        value: "true"
+      - key: REMINDERS_FILE_PATH
+        value: /data/reminders.json
+      - key: Dashboard__Username
+        value: admin
+      - key: Dashboard__Password
+        sync: false
+      - key: EmailSettings__SmtpServer
+        value: smtp.gmail.com
+      - key: EmailSettings__SmtpPort
+        value: "587"
+      - key: EmailSettings__EnableSsl
+        value: "true"
+      - key: EmailSettings__SenderEmail
+        sync: false
+      - key: EmailSettings__SenderPassword
+        sync: false
+      - key: EmailSettings__ReceiverEmail
+        sync: false
+      - key: MedicineSettings__MedicineName
+        sync: false
+      - key: MedicineSettings__ReminderMessage
+        sync: false
+      # Optional second notification channel (alongside email). Leave unset
+      # to skip Telegram entirely — see README "Optional: Telegram
+      # notifications" for how to get these two values.
+      - key: Telegram__BotToken
+        sync: false
+      - key: Telegram__ChatId
+        sync: false
+    disk:
+      name: medicine-reminder-data
+      mountPath: /data
+      sizeGB: 1
