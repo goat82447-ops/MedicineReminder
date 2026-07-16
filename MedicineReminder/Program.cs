@@ -28,7 +28,8 @@ using System.Text;
 //
 //   --mode=daily     (.github/workflows/daily-reminder.yml, cron: every day)
 //     Loads reminders.json (the "portal" — add entries there, no code
-//     changes needed) and emails any entry whose ReminderDate is tomorrow.
+//     changes needed) and emails any entry whose ReminderDate is today, at
+//     the reminder's chosen time (UTC, within a 30-minute window).
 //     Used for one-off, dated reminders.
 //
 //   --mode=dashboard
@@ -216,7 +217,7 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
         IReadOnlyList<ReminderItem> reminders = await repository.GetAllAsync();
         string? success = request.Query["added"].ToString() switch
         {
-            "1" => "Reminder added. You'll be emailed the day before its target date.",
+            "1" => "Reminder added. You'll be emailed on its target date.",
             _ => null,
         };
         return Results.Content(DashboardPage.Render(reminders, success: success), "text/html");
@@ -264,7 +265,8 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
             description, item.ReminderDate, item.ReminderTime);
 
         // No email is sent here — reminders are only emailed by the scheduled
-        // daily/medicine GitHub Actions, the day before ReminderDate.
+        // daily/medicine GitHub Actions (or the in-process scheduler), on
+        // ReminderDate itself.
         return Results.Redirect("/?added=1");
     });
 
