@@ -20,6 +20,12 @@ services:
     runtime: docker
     plan: starter
     region: oregon
+    # Set this if your GitHub repo has the project nested in a subfolder
+    # (e.g. https://github.com/<user>/MedicineReminder/tree/main/MedicineReminder
+    # means the repo root contains a "MedicineReminder" folder with the
+    # Dockerfile/csproj in it). Remove this line if Dockerfile/csproj are
+    # actually at the repo root.
+    rootDir: MedicineReminder
     healthCheckPath: /
     envVars:
       - key: PORT
