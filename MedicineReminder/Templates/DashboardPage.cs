@@ -138,9 +138,9 @@ public static class DashboardPage
     {
         (string label, string background, string color) = daysUntil switch
         {
-            < 0 => ("Past", "#f3f4f6", "#6b7280"),
-            0 => ("Due today", "#fee2e2", "#991b1b"),
-            1 => ("Tomorrow — emails today", "#fef3c7", "#92400e"),
+            < 0 => ("Past — missed", "#f3f4f6", "#6b7280"),
+            0 => ("Due today — emails today", "#fef3c7", "#92400e"),
+            1 => ("Tomorrow", "#dbeafe", "#1d4ed8"),
             <= 7 => ($"In {daysUntil} days", "#dbeafe", "#1d4ed8"),
             _ => ($"In {daysUntil} days", "#f3f4f6", "#374151"),
         };
