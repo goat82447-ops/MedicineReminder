@@ -9,4 +9,5 @@ public static class AppConfig
     public const string EmailSettingsSection = "EmailSettings";
     public const string MedicineSettingsSection = "MedicineSettings";
     public const string SchedulerSection = "Scheduler";
+    public const string TelegramSection = "Telegram";
 }
