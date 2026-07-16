@@ -6,8 +6,8 @@ namespace MedicineReminder.Models;
 /// A single reminder entry loaded from reminders.json (your "portal"). Add,
 /// edit, or remove entries directly in that file to schedule additional
 /// reminders — no code changes or redeployment required. The app checks this
-/// list on a schedule and emails any reminder whose ReminderDate is
-/// tomorrow and whose ReminderTime matches the current check window.
+/// list on a schedule and emails any reminder whose ReminderDate is today
+/// and whose ReminderTime matches the current check window.
 /// </summary>
 public sealed class ReminderItem
 {
@@ -21,17 +21,17 @@ public sealed class ReminderItem
     public string ReminderMessage { get; set; } = string.Empty;
 
     /// <summary>
-    /// The date the medicine is due. The reminder email is sent the day before.
+    /// The date the medicine is due. The reminder email is sent on this date.
     /// JSON format: "yyyy-MM-dd".
     /// </summary>
     public DateOnly ReminderDate { get; set; }
 
     /// <summary>
-    /// The time of day (in UTC) the reminder email should be sent, the day
-    /// before ReminderDate. JSON format: "HH:mm". The daily GitHub Action
-    /// runs every 30 minutes and matches reminders whose time falls within
-    /// the current 30-minute window, so actual delivery time may vary by up
-    /// to ~30 minutes.
+    /// The time of day (in UTC) the reminder email should be sent, on
+    /// ReminderDate. JSON format: "HH:mm". The daily check runs every 30
+    /// minutes and matches reminders whose time falls within the current
+    /// 30-minute window, so actual delivery time may vary by up to ~30
+    /// minutes.
     /// </summary>
     public TimeOnly ReminderTime { get; set; } = new(9, 0);
 
