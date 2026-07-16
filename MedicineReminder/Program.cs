@@ -77,6 +77,12 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Telegram is an optional second notification channel — no validation, since
+// it's fine for BotToken/ChatId to be unset (TelegramNotificationService
+// silently skips sending in that case).
+builder.Services.Configure<TelegramSettings>(builder.Configuration.GetSection(AppConfig.TelegramSection));
+builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
+
 builder.Services.AddSingleton<IEmailService, EmailService>();
 builder.Services.AddSingleton<IReminderRepository, ReminderRepository>();
 builder.Services.AddSingleton<IReminderSender, ReminderSender>();
@@ -176,6 +182,9 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
             .Bind(webBuilder.Configuration.GetSection(AppConfig.MedicineSettingsSection))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        webBuilder.Services.Configure<TelegramSettings>(webBuilder.Configuration.GetSection(AppConfig.TelegramSection));
+        webBuilder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
 
         webBuilder.Services.AddSingleton<IEmailService, EmailService>();
         webBuilder.Services.AddSingleton<IReminderSender, ReminderSender>();
