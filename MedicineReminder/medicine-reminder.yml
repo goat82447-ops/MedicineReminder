@@ -1,0 +1,54 @@
+name: Medicine Reminder Email (Monthly)
+
+# ---------------------------------------------------------------------------
+# Runs automatically at 08:00 UTC on the 9th day of every month, one day
+# before the fixed medicine date (the 10th). Sends the single reminder
+# configured in the MedicineSettings section of appsettings.json — fully
+# recurring, no date bookkeeping needed, since the cron schedule itself
+# guarantees the timing. Can also be run on-demand via workflow_dispatch.
+#
+# For one-off, dated reminders (added via reminders.json), see the separate
+# daily-reminder.yml workflow instead.
+# ---------------------------------------------------------------------------
+on:
+  schedule:
+    - cron: "0 8 9 * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  send-medicine-reminder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run Medicine Reminder
+        run: dotnet run --configuration Release --no-build -- --mode=medicine
+        env:
+          EmailSettings__SmtpServer: smtp.gmail.com
+          EmailSettings__SmtpPort: 587
+          EmailSettings__EnableSsl: true
+          EmailSettings__SenderEmail: ${{ secrets.SENDER_EMAIL }}
+          EmailSettings__SenderPassword: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EmailSettings__ReceiverEmail: ${{ secrets.RECEIVER_EMAIL }}
+          MedicineSettings__MedicineName: ${{ secrets.MEDICINE_NAME }}
+          MedicineSettings__ReminderMessage: ${{ secrets.REMINDER_MESSAGE }}
+          # Optional second channel — no-op if these secrets aren't set.
+          Telegram__BotToken: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          Telegram__ChatId: ${{ secrets.TELEGRAM_CHAT_ID }}
