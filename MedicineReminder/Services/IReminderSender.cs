@@ -15,7 +15,7 @@ public interface IReminderSender
     Task<bool> SendMedicineReminderAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Loads reminders.json and emails any entry whose date is tomorrow and
+    /// Loads reminders.json and emails any entry whose date is today and
     /// whose reminder time falls in the current 30-minute UTC window.
     /// Returns false if any individual send failed.
     /// </summary>
