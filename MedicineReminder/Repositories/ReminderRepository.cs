@@ -83,6 +83,30 @@ public sealed class ReminderRepository : IReminderRepository
         }
     }
 
+    public async Task<bool> UpdateAsync(int index, ReminderItem item, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        await FileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            List<ReminderItem> reminders = await ReadAllUnlockedAsync(cancellationToken).ConfigureAwait(false);
+            if (index < 0 || index >= reminders.Count)
+            {
+                return false;
+            }
+
+            reminders[index] = item;
+            await WriteAllUnlockedAsync(reminders, cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Updated reminder at index {Index} in {FilePath}.", index, _filePath);
+            return true;
+        }
+        finally
+        {
+            FileLock.Release();
+        }
+    }
+
     public async Task<bool> RemoveAsync(int index, CancellationToken cancellationToken = default)
     {
         await FileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
