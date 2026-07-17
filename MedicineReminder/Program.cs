@@ -238,11 +238,20 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
             "1" => "Reminder added. You'll be emailed on its target date.",
             _ => null,
         };
+        success ??= request.Query["updated"].ToString() switch
+        {
+            "1" => "Reminder updated.",
+            _ => null,
+        };
         return Results.Content(DashboardPage.Render(reminders, success: success), "text/html");
     });
 
     app.MapPost("/reminders", async (HttpRequest request) =>
     {
+        // Times are entered and displayed in IST in the dashboard, but stored
+        // and scheduled in UTC. IST = UTC + 5:30.
+        TimeSpan istOffset = TimeSpan.FromMinutes(330);
+
         Microsoft.AspNetCore.Http.IFormCollection form = await request.ReadFormAsync();
         string description = form["description"].ToString().Trim();
         string medicineName = form["medicineName"].ToString().Trim();
@@ -251,17 +260,31 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
         string reminderTimeRaw = form["reminderTime"].ToString().Trim();
         string receiverEmailRaw = form["receiverEmail"].ToString().Trim();
         string telegramChatIdRaw = form["telegramChatId"].ToString().Trim();
+        string editIndexRaw = form["editIndex"].ToString().Trim();
+        bool isEdit = int.TryParse(editIndexRaw, out int editIndex) && editIndex >= 0;
 
-        bool hasValidDate = DateOnly.TryParse(reminderDateRaw, out DateOnly parsedDate);
-        bool hasValidTime = TimeOnly.TryParse(reminderTimeRaw, out TimeOnly parsedTime);
+        bool hasValidDate = DateOnly.TryParse(reminderDateRaw, out DateOnly parsedIstDate);
+        bool hasValidTime = TimeOnly.TryParse(reminderTimeRaw, out TimeOnly parsedIstTime);
+
+        // Convert the IST date+time the user typed into the UTC date+time we
+        // persist (this also correctly rolls the date back across midnight,
+        // e.g. IST 02:00 -> UTC 20:30 the previous day).
+        DateOnly utcDate = default;
+        TimeOnly utcTime = new(9, 0);
+        if (hasValidDate && hasValidTime)
+        {
+            DateTime utcDateTime = parsedIstDate.ToDateTime(parsedIstTime) - istOffset;
+            utcDate = DateOnly.FromDateTime(utcDateTime);
+            utcTime = TimeOnly.FromDateTime(utcDateTime);
+        }
 
         var item = new ReminderItem
         {
             Description = description,
             MedicineName = medicineName,
             ReminderMessage = reminderMessage,
-            ReminderDate = hasValidDate ? parsedDate : default,
-            ReminderTime = hasValidTime ? parsedTime : new TimeOnly(9, 0),
+            ReminderDate = utcDate,
+            ReminderTime = utcTime,
             ReceiverEmail = string.IsNullOrWhiteSpace(receiverEmailRaw) ? null : receiverEmailRaw,
             TelegramChatId = string.IsNullOrWhiteSpace(telegramChatIdRaw) ? null : telegramChatIdRaw,
         };
@@ -277,6 +300,23 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
             return Results.Content(
                 DashboardPage.Render(await repository.GetAllAsync(), error: "Please fill in all fields with a valid date and time."),
                 "text/html");
+        }
+
+        if (isEdit)
+        {
+            bool updated = await repository.UpdateAsync(editIndex, item);
+            if (!updated)
+            {
+                dashboardLogger.LogWarning("Edit failed — reminder index {Index} out of range.", editIndex);
+                return Results.Content(
+                    DashboardPage.Render(await repository.GetAllAsync(), error: "That reminder no longer exists."),
+                    "text/html");
+            }
+
+            dashboardLogger.LogInformation(
+                "Dashboard updated reminder '{Description}' (index {Index}) for {ReminderDate:yyyy-MM-dd} at {ReminderTime:HH:mm} UTC.",
+                description, editIndex, item.ReminderDate, item.ReminderTime);
+            return Results.Redirect("/?updated=1");
         }
 
         await repository.AddAsync(item);
