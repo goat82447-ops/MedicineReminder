@@ -1,0 +1,11 @@
+# Local secrets — never commit real credentials/tokens
+appsettings.Local.json
+**/appsettings.Local.json
+
+# Build output
+bin/
+obj/
+
+# User-specific / IDE
+.vs/
+*.user
