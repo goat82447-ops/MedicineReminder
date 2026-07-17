@@ -1,21 +1,21 @@
-# Keep the Docker build context clean and reproducible. Without this,
-# `COPY . .` pulls in Windows-built bin/ and obj/ folders, which corrupt the
-# Linux `dotnet publish` (stale intermediate files, wrong RIDs) and can cause
-# spurious "type could not be found" / NETSDK errors during deploy.
+# syntax=docker/dockerfile:1
 
-# Build outputs / intermediates (must be rebuilt inside the container)
-**/bin/
-**/obj/
+# ---- Stage 1: build & publish ----
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
 
-# Local secrets — never ship these into an image
-**/appsettings.Local.json
+# Restore first (better layer caching)
+COPY MedicineReminder.csproj ./
+RUN dotnet restore MedicineReminder.csproj
 
-# Git / IDE / OS noise
-.git/
-.gitignore
-.vs/
-.vscode/
-*.user
+# Copy the rest of the source and publish a Release build
+COPY . ./
+RUN dotnet publish MedicineReminder.csproj -c Release -o /app/publish
 
-# Docs not needed at runtime
-**/*.md
+# ---- Stage 2: runtime ----
+FROM mcr.microsoft.com/dotnet/aspnet:8.0
+WORKDIR /app
+COPY --from=build /app/publish ./
+
+# Render provides PORT; the app also reads Scheduler__Enabled etc. from env vars
+ENTRYPOINT ["dotnet", "MedicineReminder.dll", "--mode=dashboard"]
