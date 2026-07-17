@@ -10,4 +10,5 @@ public static class AppConfig
     public const string MedicineSettingsSection = "MedicineSettings";
     public const string SchedulerSection = "Scheduler";
     public const string TelegramSection = "Telegram";
+    public const string TwilioSection = "Twilio";
 }
