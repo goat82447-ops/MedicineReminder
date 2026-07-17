@@ -8,5 +8,10 @@ namespace MedicineReminder.Services;
 /// </summary>
 public interface ITelegramNotificationService
 {
-    Task SendMessageAsync(string message, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Sends a Telegram message. When <paramref name="chatId"/> is provided it
+    /// overrides the default ChatId from configuration, allowing a per-reminder
+    /// recipient. When null/empty, the configured default ChatId is used.
+    /// </summary>
+    Task SendMessageAsync(string message, string? chatId = null, CancellationToken cancellationToken = default);
 }
