@@ -130,7 +130,7 @@ public static class DashboardPage
         string rows = indexed.Count == 0
             ? """
                 <tr>
-                  <td colspan="8" style="padding:40px 16px; text-align:center; color:#9ca3af;">
+                  <td colspan="9" style="padding:40px 16px; text-align:center; color:#9ca3af;">
                     <div style="font-size:40px; margin-bottom:8px;">🗓️</div>
                     No reminders yet — add one below to get started.
                   </td>
@@ -232,6 +232,10 @@ public static class DashboardPage
                         <label class="field-label">✉️ To email (optional)</label>
                         <input type="email" name="receiverEmail" maxlength="200" placeholder="Leave blank to use the default receiver" />
                       </div>
+                      <div style="margin-bottom:8px;">
+                        <label class="field-label">📨 Telegram Chat ID (optional)</label>
+                        <input type="text" name="telegramChatId" maxlength="64" inputmode="numeric" placeholder="e.g. 8999390672 — the person must Start your bot first" />
+                      </div>
                       <p style="margin:6px 0 16px; font-size:12px; color:#9ca3af;">
                         Delivery is checked every 30 minutes, so actual send time may vary by up to ~30 minutes from what you pick.
                       </p>
@@ -254,6 +258,7 @@ public static class DashboardPage
                             <th style="padding:8px;">Medicine</th>
                             <th style="padding:8px;">Description</th>
                             <th style="padding:8px;">To</th>
+                            <th style="padding:8px;">Telegram</th>
                             <th style="padding:8px;">Status</th>
                             <th style="padding:8px;"></th>
                           </tr>
@@ -280,7 +285,7 @@ public static class DashboardPage
         string badge = BuildStatusBadge(daysUntil);
         string isoUtc = reminder.ReminderDate.ToDateTime(reminder.ReminderTime).ToString("yyyy-MM-ddTHH:mm:00Z");
         string searchText = WebUtility.HtmlEncode(
-            $"{reminder.MedicineName} {reminder.Description} {reminder.ReceiverEmail}".ToLowerInvariant());
+            $"{reminder.MedicineName} {reminder.Description} {reminder.ReceiverEmail} {reminder.TelegramChatId}".ToLowerInvariant());
 
         return $"""
             <tr data-search="{searchText}">
@@ -290,6 +295,7 @@ public static class DashboardPage
               <td data-label="Medicine" style="padding:10px 8px;">{WebUtility.HtmlEncode(reminder.MedicineName)}</td>
               <td data-label="Description" style="padding:10px 8px; color:#6b7280;">{WebUtility.HtmlEncode(reminder.Description)}</td>
               <td data-label="To" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.ReceiverEmail) ? "<span style=\"color:#9ca3af;\">default</span>" : WebUtility.HtmlEncode(reminder.ReceiverEmail))}</td>
+              <td data-label="Telegram" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.TelegramChatId) ? "<span style=\"color:#9ca3af;\">default</span>" : WebUtility.HtmlEncode(reminder.TelegramChatId))}</td>
               <td data-label="Status" style="padding:10px 8px; white-space:nowrap;">{badge}</td>
               <td style="padding:10px 8px; text-align:right;">
                 <form method="post" action="/reminders/{index}/delete" onsubmit="return confirm('Delete this reminder?');">
