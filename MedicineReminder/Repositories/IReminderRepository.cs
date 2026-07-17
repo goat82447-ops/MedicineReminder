@@ -16,6 +16,14 @@ public interface IReminderRepository
     Task AddAsync(ReminderItem item, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Replaces the reminder at <paramref name="index"/> (as returned by
+    /// <see cref="GetAllAsync"/>) with <paramref name="item"/> and persists
+    /// the updated list. Returns <see langword="false"/> if the index is out
+    /// of range.
+    /// </summary>
+    Task<bool> UpdateAsync(int index, ReminderItem item, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Removes the reminder at <paramref name="index"/> (as returned by
     /// <see cref="GetAllAsync"/>) and persists the updated list. Returns
     /// <see langword="false"/> if the index is out of range.
