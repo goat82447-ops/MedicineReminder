@@ -43,4 +43,22 @@ public sealed class ReminderItem
     /// </summary>
     [EmailAddress(ErrorMessage = "Receiver email is not a valid email address.")]
     public string? ReceiverEmail { get; set; }
+
+    /// <summary>
+    /// Optional recipient mobile number (E.164 format, e.g. "+919876543210")
+    /// for this specific reminder's SMS. If left empty, falls back to the
+    /// default "ToPhoneNumber" configured in TwilioSettings. Lets each
+    /// reminder's SMS be sent to a different person.
+    /// </summary>
+    [Phone(ErrorMessage = "Receiver phone is not a valid phone number.")]
+    public string? ReceiverPhone { get; set; }
+
+    /// <summary>
+    /// Optional Telegram Chat ID (a numeric id such as "8999390672") for this
+    /// specific reminder. The recipient must have pressed Start on the bot at
+    /// least once. If left empty, falls back to the default "ChatId"
+    /// configured in TelegramSettings. Lets each reminder's Telegram message
+    /// be sent to a different person, entered directly in the dashboard.
+    /// </summary>
+    public string? TelegramChatId { get; set; }
 }
