@@ -1,35 +1,43 @@
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using System.Text;
 using MedicineReminder.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace MedicineReminder.Services;
 
-/// <inheritdoc cref="ITelegramNotificationService"/>
-public sealed class TelegramNotificationService : ITelegramNotificationService
+/// <inheritdoc cref="ISmsNotificationService"/>
+public sealed class TwilioSmsNotificationService : ISmsNotificationService
 {
     private readonly HttpClient _httpClient;
-    private readonly IOptions<TelegramSettings> _settings;
-    private readonly ILogger<TelegramNotificationService> _logger;
+    private readonly IOptions<TwilioSettings> _settings;
+    private readonly ILogger<TwilioSmsNotificationService> _logger;
 
-    public TelegramNotificationService(HttpClient httpClient, IOptions<TelegramSettings> settings, ILogger<TelegramNotificationService> logger)
+    public TwilioSmsNotificationService(HttpClient httpClient, IOptions<TwilioSettings> settings, ILogger<TwilioSmsNotificationService> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task SendMessageAsync(string message, string? chatId = null, CancellationToken cancellationToken = default)
+    public async Task SendSmsAsync(string message, string? toPhoneNumber = null, CancellationToken cancellationToken = default)
     {
-        TelegramSettings settings = _settings.Value;
-
-        // Prefer the per-reminder chat id when supplied; otherwise use the
-        // default ChatId from configuration.
-        string? targetChatId = string.IsNullOrWhiteSpace(chatId) ? settings.ChatId : chatId;
-
-        if (string.IsNullOrWhiteSpace(settings.BotToken) || string.IsNullOrWhiteSpace(targetChatId))
+        TwilioSettings settings = _settings.Value;
+        if (string.IsNullOrWhiteSpace(settings.AccountSid)
+            || string.IsNullOrWhiteSpace(settings.AuthToken)
+            || string.IsNullOrWhiteSpace(settings.FromPhoneNumber))
         {
-            // Telegram is an optional channel; silently skip when unconfigured.
+            // Twilio is an optional channel; silently skip when unconfigured.
+            return;
+        }
+
+        string recipient = string.IsNullOrWhiteSpace(toPhoneNumber)
+            ? settings.ToPhoneNumber ?? string.Empty
+            : toPhoneNumber;
+
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            _logger.LogWarning("Twilio SMS skipped: no recipient phone number configured.");
             return;
         }
 
@@ -38,27 +46,37 @@ public sealed class TelegramNotificationService : ITelegramNotificationService
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(15));
 
-            string url = $"https://api.telegram.org/bot{Uri.EscapeDataString(settings.BotToken)}/sendMessage";
-            var payload = new { chat_id = targetChatId, text = message };
+            string url = $"https://api.twilio.com/2010-04-01/Accounts/{Uri.EscapeDataString(settings.AccountSid)}/Messages.json";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, url);
+            string basicAuth = Convert.ToBase64String(
+                Encoding.ASCII.GetBytes($"{settings.AccountSid}:{settings.AuthToken}"));
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", basicAuth);
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["To"] = recipient,
+                ["From"] = settings.FromPhoneNumber,
+                ["Body"] = message,
+            });
 
             using HttpResponseMessage response = await _httpClient
-                .PostAsJsonAsync(url, payload, cts.Token)
+                .SendAsync(request, cts.Token)
                 .ConfigureAwait(false);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Telegram notification sent.");
+                _logger.LogInformation("Twilio SMS sent to {Recipient}.", recipient);
             }
             else
             {
                 string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                _logger.LogWarning("Telegram notification failed ({StatusCode}): {Body}", (int)response.StatusCode, body);
+                _logger.LogWarning("Twilio SMS failed ({StatusCode}): {Body}", (int)response.StatusCode, body);
             }
         }
         catch (Exception ex)
         {
-            // Never let a Telegram failure break email delivery — log and move on.
-            _logger.LogWarning(ex, "Failed to send Telegram notification.");
+            // Never let an SMS failure break email/Telegram delivery.
+            _logger.LogWarning(ex, "Failed to send Twilio SMS.");
         }
     }
 }
