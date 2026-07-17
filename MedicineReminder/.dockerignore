@@ -1,0 +1,20 @@
+# Keep the Docker build context clean and reproducible so `COPY . .` does not
+# pull in Windows-built bin/ and obj/ folders, which corrupt the Linux
+# `dotnet publish` and can cause spurious "type could not be found" errors.
+
+# Build outputs / intermediates (rebuilt inside the container)
+**/bin/
+**/obj/
+
+# Local secrets — never ship these into an image
+**/appsettings.Local.json
+
+# Git / IDE / OS noise
+.git/
+.gitignore
+.vs/
+.vscode/
+*.user
+
+# Docs not needed at runtime
+**/*.md
