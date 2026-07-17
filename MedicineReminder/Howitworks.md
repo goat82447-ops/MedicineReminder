@@ -36,6 +36,24 @@ recipient.
 - Each reminder is delivered on up to **three channels**: Email (always),
   Telegram (if a bot is configured), SMS (if Twilio is configured).
 
+### The Telegram send flow
+
+```mermaid
+flowchart LR
+    A[You add reminder<br/>in dashboard] --> B[Saved to<br/>reminders.json]
+    B --> C[Scheduler wakes<br/>every 30 min]
+    C --> D{Any reminder due<br/>right now?}
+    D -- No --> C
+    D -- Yes --> E[Send Email +<br/>Telegram + SMS]
+    E --> F[Telegram bot posts<br/>message to Chat ID]
+```
+
+**Key point:** adding a reminder does **not** send instantly — the message
+goes out at the reminder's date + time, when the 30-minute scheduler sees it
+is due. For Telegram to actually fire you need: `Telegram__BotToken` set, a
+valid **Chat ID** (typed in the dashboard or the default), and the recipient
+must have pressed **Start** on your bot at least once.
+
 ---
 
 ## 2. The three run modes
