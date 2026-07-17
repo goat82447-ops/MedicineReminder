@@ -83,6 +83,12 @@ builder.Services
 builder.Services.Configure<TelegramSettings>(builder.Configuration.GetSection(AppConfig.TelegramSection));
 builder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
 
+// Twilio SMS is another optional channel — also unvalidated, since it's fine
+// for the credentials to be unset (TwilioSmsNotificationService silently
+// skips sending in that case).
+builder.Services.Configure<TwilioSettings>(builder.Configuration.GetSection(AppConfig.TwilioSection));
+builder.Services.AddHttpClient<ISmsNotificationService, TwilioSmsNotificationService>();
+
 builder.Services.AddSingleton<IEmailService, EmailService>();
 builder.Services.AddSingleton<IReminderRepository, ReminderRepository>();
 builder.Services.AddSingleton<IReminderSender, ReminderSender>();
@@ -186,6 +192,9 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
         webBuilder.Services.Configure<TelegramSettings>(webBuilder.Configuration.GetSection(AppConfig.TelegramSection));
         webBuilder.Services.AddHttpClient<ITelegramNotificationService, TelegramNotificationService>();
 
+        webBuilder.Services.Configure<TwilioSettings>(webBuilder.Configuration.GetSection(AppConfig.TwilioSection));
+        webBuilder.Services.AddHttpClient<ISmsNotificationService, TwilioSmsNotificationService>();
+
         webBuilder.Services.AddSingleton<IEmailService, EmailService>();
         webBuilder.Services.AddSingleton<IReminderSender, ReminderSender>();
         webBuilder.Services.AddHostedService<ReminderSchedulerBackgroundService>();
@@ -241,6 +250,7 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
         string reminderDateRaw = form["reminderDate"].ToString().Trim();
         string reminderTimeRaw = form["reminderTime"].ToString().Trim();
         string receiverEmailRaw = form["receiverEmail"].ToString().Trim();
+        string telegramChatIdRaw = form["telegramChatId"].ToString().Trim();
 
         bool hasValidDate = DateOnly.TryParse(reminderDateRaw, out DateOnly parsedDate);
         bool hasValidTime = TimeOnly.TryParse(reminderTimeRaw, out TimeOnly parsedTime);
@@ -253,6 +263,7 @@ async Task<int> RunDashboardAsync(string[] rawArgs)
             ReminderDate = hasValidDate ? parsedDate : default,
             ReminderTime = hasValidTime ? parsedTime : new TimeOnly(9, 0),
             ReceiverEmail = string.IsNullOrWhiteSpace(receiverEmailRaw) ? null : receiverEmailRaw,
+            TelegramChatId = string.IsNullOrWhiteSpace(telegramChatIdRaw) ? null : telegramChatIdRaw,
         };
 
         var validationContext = new ValidationContext(item);
