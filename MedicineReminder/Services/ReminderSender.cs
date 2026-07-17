@@ -17,6 +17,7 @@ public sealed class ReminderSender : IReminderSender
     private readonly IReminderRepository _reminderRepository;
     private readonly IEmailService _emailService;
     private readonly ITelegramNotificationService _telegramNotificationService;
+    private readonly ISmsNotificationService _smsNotificationService;
     private readonly ILogger<ReminderSender> _logger;
 
     public ReminderSender(
@@ -25,6 +26,7 @@ public sealed class ReminderSender : IReminderSender
         IReminderRepository reminderRepository,
         IEmailService emailService,
         ITelegramNotificationService telegramNotificationService,
+        ISmsNotificationService smsNotificationService,
         ILogger<ReminderSender> logger)
     {
         _medicineSettings = medicineSettings ?? throw new ArgumentNullException(nameof(medicineSettings));
@@ -32,6 +34,7 @@ public sealed class ReminderSender : IReminderSender
         _reminderRepository = reminderRepository ?? throw new ArgumentNullException(nameof(reminderRepository));
         _emailService = emailService ?? throw new ArgumentNullException(nameof(emailService));
         _telegramNotificationService = telegramNotificationService ?? throw new ArgumentNullException(nameof(telegramNotificationService));
+        _smsNotificationService = smsNotificationService ?? throw new ArgumentNullException(nameof(smsNotificationService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -56,9 +59,12 @@ public sealed class ReminderSender : IReminderSender
             await _emailService.SendReminderEmailAsync(emailSettings.ReceiverEmail, subject, htmlBody, plainTextBody, cts.Token);
             _logger.LogInformation("Medicine reminder email sent for {MedicineName}.", medicineSettings.MedicineName);
 
-            await _telegramNotificationService.SendMessageAsync(
-                $"\U0001F48A Medicine Reminder: {medicineSettings.MedicineName}\n{medicineSettings.ReminderMessage}\nMedicine date: {medicineDate:yyyy-MM-dd HH:mm} UTC",
-                cancellationToken);
+            string medicineNotification =
+                $"\U0001F48A Medicine Reminder: {medicineSettings.MedicineName}\n{medicineSettings.ReminderMessage}\nMedicine date: {medicineDate:yyyy-MM-dd HH:mm} UTC";
+
+            await _telegramNotificationService.SendMessageAsync(medicineNotification, chatId: null, cancellationToken);
+
+            await _smsNotificationService.SendSmsAsync(medicineNotification, toPhoneNumber: null, cancellationToken);
 
             return true;
         }
@@ -139,9 +145,12 @@ public sealed class ReminderSender : IReminderSender
 
                 _logger.LogInformation("Reminder email sent to {ToEmail}: {Description}", toEmail, reminder.Description);
 
-                await _telegramNotificationService.SendMessageAsync(
-                    $"\U0001F48A Medicine Reminder: {reminder.MedicineName}\n{reminder.ReminderMessage}\n{(string.IsNullOrWhiteSpace(reminder.Description) ? string.Empty : $"Description: {reminder.Description}\n")}Scheduled: {scheduledDate:yyyy-MM-dd HH:mm} UTC",
-                    cancellationToken);
+                string reminderNotification =
+                    $"\U0001F48A Medicine Reminder: {reminder.MedicineName}\n{reminder.ReminderMessage}\n{(string.IsNullOrWhiteSpace(reminder.Description) ? string.Empty : $"Description: {reminder.Description}\n")}Scheduled: {scheduledDate:yyyy-MM-dd HH:mm} UTC";
+
+                await _telegramNotificationService.SendMessageAsync(reminderNotification, reminder.TelegramChatId, cancellationToken);
+
+                await _smsNotificationService.SendSmsAsync(reminderNotification, reminder.ReceiverPhone, cancellationToken);
             }
             catch (Exception ex)
             {
