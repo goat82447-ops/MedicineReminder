@@ -19,10 +19,15 @@ public sealed class TelegramNotificationService : ITelegramNotificationService
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task SendMessageAsync(string message, CancellationToken cancellationToken = default)
+    public async Task SendMessageAsync(string message, string? chatId = null, CancellationToken cancellationToken = default)
     {
         TelegramSettings settings = _settings.Value;
-        if (string.IsNullOrWhiteSpace(settings.BotToken) || string.IsNullOrWhiteSpace(settings.ChatId))
+
+        // Prefer the per-reminder chat id when supplied; otherwise use the
+        // default ChatId from configuration.
+        string? targetChatId = string.IsNullOrWhiteSpace(chatId) ? settings.ChatId : chatId;
+
+        if (string.IsNullOrWhiteSpace(settings.BotToken) || string.IsNullOrWhiteSpace(targetChatId))
         {
             // Telegram is an optional channel; silently skip when unconfigured.
             return;
@@ -34,7 +39,7 @@ public sealed class TelegramNotificationService : ITelegramNotificationService
             cts.CancelAfter(TimeSpan.FromSeconds(15));
 
             string url = $"https://api.telegram.org/bot{Uri.EscapeDataString(settings.BotToken)}/sendMessage";
-            var payload = new { chat_id = settings.ChatId, text = message };
+            var payload = new { chat_id = targetChatId, text = message };
 
             using HttpResponseMessage response = await _httpClient
                 .PostAsJsonAsync(url, payload, cts.Token)
