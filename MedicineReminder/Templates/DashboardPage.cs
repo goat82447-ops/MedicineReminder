@@ -64,9 +64,10 @@ public static class DashboardPage
             var now = new Date();
             var thirtyMinMs = 30 * 60 * 1000;
             var next = new Date(Math.ceil(now.getTime() / thirtyMinMs) * thirtyMinMs + 5 * 60 * 1000);
+            // Fill the inputs with local (IST) date/time components.
             document.getElementById('reminderDate').value =
-              next.getUTCFullYear() + '-' + pad(next.getUTCMonth() + 1) + '-' + pad(next.getUTCDate());
-            document.getElementById('reminderTime').value = pad(next.getUTCHours()) + ':' + pad(next.getUTCMinutes());
+              next.getFullYear() + '-' + pad(next.getMonth() + 1) + '-' + pad(next.getDate());
+            document.getElementById('reminderTime').value = pad(next.getHours()) + ':' + pad(next.getMinutes());
             updateLocalPreview();
           }
 
@@ -75,26 +76,43 @@ public static class DashboardPage
             var timeVal = document.getElementById('reminderTime').value;
             var preview = document.getElementById('localPreview');
             if (!dateVal || !timeVal) { preview.textContent = ''; return; }
-            var utcDate = new Date(dateVal + 'T' + timeVal + ':00Z');
-            if (isNaN(utcDate.getTime())) { preview.textContent = ''; return; }
-            preview.textContent = 'Your local time: ' + utcDate.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+            // Input is IST (browser local). Show the UTC time it maps to.
+            var localDate = new Date(dateVal + 'T' + timeVal);
+            if (isNaN(localDate.getTime())) { preview.textContent = ''; return; }
+            preview.textContent = '\u21D2 Sends at ' + pad(localDate.getUTCHours()) + ':' + pad(localDate.getUTCMinutes()) + ' UTC (server time).';
           }
 
           function tickClock() {
             var now = new Date();
             var utcStr = pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ' UTC';
-            var localStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) + ' local';
+            var localStr = now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) + ' IST';
             var clock = document.getElementById('clock');
             if (clock) { clock.textContent = utcStr + '   \u2022   ' + localStr; }
           }
 
-          function renderLocalTimes() {
-            document.querySelectorAll('.local-time[data-utc]').forEach(function (cell) {
-              var utcDate = new Date(cell.getAttribute('data-utc'));
-              if (!isNaN(utcDate.getTime())) {
-                cell.textContent = utcDate.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-              }
-            });
+          function startEdit(btn) {
+            document.getElementById('editIndex').value = btn.getAttribute('data-index');
+            document.getElementById('addForm').description.value = btn.getAttribute('data-description');
+            document.getElementById('addForm').medicineName.value = btn.getAttribute('data-medicine');
+            document.getElementById('addForm').reminderMessage.value = btn.getAttribute('data-message');
+            document.getElementById('reminderDate').value = btn.getAttribute('data-date');
+            document.getElementById('reminderTime').value = btn.getAttribute('data-time');
+            document.getElementById('addForm').receiverEmail.value = btn.getAttribute('data-email');
+            document.getElementById('addForm').telegramChatId.value = btn.getAttribute('data-chatid');
+            document.getElementById('formHeading').textContent = '\u270F\uFE0F Edit reminder';
+            document.getElementById('submitBtn').textContent = 'Update reminder';
+            document.getElementById('cancelEditBtn').style.display = 'inline-block';
+            updateLocalPreview();
+            document.getElementById('addForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+
+          function cancelEdit() {
+            document.getElementById('addForm').reset();
+            document.getElementById('editIndex').value = '';
+            document.getElementById('formHeading').textContent = '\u2795 Add a reminder';
+            document.getElementById('submitBtn').textContent = 'Add reminder';
+            document.getElementById('cancelEditBtn').style.display = 'none';
+            updateLocalPreview();
           }
 
           function filterRows() {
@@ -107,15 +125,23 @@ public static class DashboardPage
 
           tickClock();
           setInterval(tickClock, 1000);
-          renderLocalTimes();
         </script>
         """;
 
+    // Times are stored/scheduled in UTC but shown and entered in IST (UTC+5:30).
+    private static readonly TimeSpan IstOffset = TimeSpan.FromMinutes(330);
+
+    private static (DateOnly Date, TimeOnly Time) ToIst(ReminderItem reminder)
+    {
+        DateTime ist = reminder.ReminderDate.ToDateTime(reminder.ReminderTime).Add(IstOffset);
+        return (DateOnly.FromDateTime(ist), TimeOnly.FromDateTime(ist));
+    }
+
     public static string Render(IReadOnlyList<ReminderItem> reminders, string? error = null, string? success = null)
     {
-        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow.Add(IstOffset));
 
-        // Pair each reminder with its original index (needed so the Delete
+        // Pair each reminder with its original index (needed so the Delete/Edit
         // form posts to the correct position in reminders.json) before
         // sorting soonest-first for display.
         List<(ReminderItem Reminder, int Index)> indexed = reminders
@@ -124,13 +150,17 @@ public static class DashboardPage
             .ThenBy(x => x.Reminder.ReminderTime)
             .ToList();
 
-        int dueTodayCount = reminders.Count(r => r.ReminderDate == today);
-        int dueThisWeekCount = reminders.Count(r => r.ReminderDate >= today && r.ReminderDate <= today.AddDays(7));
+        int dueTodayCount = reminders.Count(r => ToIst(r).Date == today);
+        int dueThisWeekCount = reminders.Count(r =>
+        {
+            DateOnly d = ToIst(r).Date;
+            return d >= today && d <= today.AddDays(7);
+        });
 
         string rows = indexed.Count == 0
             ? """
                 <tr>
-                  <td colspan="9" style="padding:40px 16px; text-align:center; color:#9ca3af;">
+                  <td colspan="8" style="padding:40px 16px; text-align:center; color:#9ca3af;">
                     <div style="font-size:40px; margin-bottom:8px;">🗓️</div>
                     No reminders yet — add one below to get started.
                   </td>
@@ -169,7 +199,7 @@ public static class DashboardPage
                       <div>
                         <p style="margin:0; color:#ffffff; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; opacity:0.85;">💊 MedicineReminder</p>
                         <h1 style="margin:8px 0 0; color:#ffffff; font-size:28px;">Reminder Dashboard</h1>
-                        <p style="margin:6px 0 0; color:#e0e7ff; font-size:13px;">You'll be emailed at the chosen time, on the target date itself (all times UTC).</p>
+                        <p style="margin:6px 0 0; color:#e0e7ff; font-size:13px;">You'll be emailed at the chosen time, on the target date itself (all times IST).</p>
                       </div>
                       <div id="clock" style="color:#e0e7ff; font-size:13px; font-family:'Consolas','Courier New',monospace; text-align:right; white-space:nowrap;">—</div>
                     </div>
@@ -194,8 +224,9 @@ public static class DashboardPage
                   {errorBanner}
 
                   <div class="card" style="padding:24px 28px; margin-bottom:20px;">
-                    <h2 style="margin:0 0 16px; font-size:18px; color:#111827;">➕ Add a reminder</h2>
+                    <h2 id="formHeading" style="margin:0 0 16px; font-size:18px; color:#111827;">➕ Add a reminder</h2>
                     <form method="post" action="/reminders" id="addForm">
+                      <input type="hidden" name="editIndex" id="editIndex" value="" />
                       <div class="form-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;">
                         <div>
                           <label class="field-label">📝 Description</label>
@@ -217,7 +248,7 @@ public static class DashboardPage
                           <input type="date" name="reminderDate" id="reminderDate" required onchange="updateLocalPreview()" />
                         </div>
                         <div>
-                          <label class="field-label">⏰ Send time (UTC)</label>
+                          <label class="field-label">⏰ Send time (IST)</label>
                           <input type="time" name="reminderTime" id="reminderTime" required value="09:00" onchange="updateLocalPreview()" />
                         </div>
                       </div>
@@ -239,7 +270,8 @@ public static class DashboardPage
                       <p style="margin:6px 0 16px; font-size:12px; color:#9ca3af;">
                         Delivery is checked every 30 minutes, so actual send time may vary by up to ~30 minutes from what you pick.
                       </p>
-                      <button type="submit" class="btn-primary">Add reminder</button>
+                      <button type="submit" id="submitBtn" class="btn-primary">Add reminder</button>
+                      <button type="button" id="cancelEditBtn" class="btn-primary" style="display:none; margin-left:8px; background:#6b7280;" onclick="cancelEdit()">Cancel edit</button>
                     </form>
                   </div>
 
@@ -253,8 +285,7 @@ public static class DashboardPage
                         <thead>
                           <tr style="text-align:left; color:#6b7280; border-bottom:2px solid #e5e7eb;">
                             <th style="padding:8px;">Date</th>
-                            <th style="padding:8px;">Time (UTC)</th>
-                            <th style="padding:8px;">Your local time</th>
+                            <th style="padding:8px;">Time (IST)</th>
                             <th style="padding:8px;">Medicine</th>
                             <th style="padding:8px;">Description</th>
                             <th style="padding:8px;">To</th>
@@ -281,24 +312,39 @@ public static class DashboardPage
 
     private static string BuildRow(ReminderItem reminder, int index, DateOnly today)
     {
-        int daysUntil = reminder.ReminderDate.DayNumber - today.DayNumber;
+        (DateOnly istDate, TimeOnly istTime) = ToIst(reminder);
+        int daysUntil = istDate.DayNumber - today.DayNumber;
         string badge = BuildStatusBadge(daysUntil);
-        string isoUtc = reminder.ReminderDate.ToDateTime(reminder.ReminderTime).ToString("yyyy-MM-ddTHH:mm:00Z");
         string searchText = WebUtility.HtmlEncode(
             $"{reminder.MedicineName} {reminder.Description} {reminder.ReceiverEmail} {reminder.TelegramChatId}".ToLowerInvariant());
 
+        string encDescription = WebUtility.HtmlEncode(reminder.Description);
+        string encMedicine = WebUtility.HtmlEncode(reminder.MedicineName);
+        string encMessage = WebUtility.HtmlEncode(reminder.ReminderMessage);
+        string encEmail = WebUtility.HtmlEncode(reminder.ReceiverEmail ?? string.Empty);
+        string encChatId = WebUtility.HtmlEncode(reminder.TelegramChatId ?? string.Empty);
+
         return $"""
             <tr data-search="{searchText}">
-              <td data-label="Date" style="padding:10px 8px; color:#111827; font-weight:600; white-space:nowrap;">{reminder.ReminderDate:yyyy-MM-dd}</td>
-              <td data-label="Time (UTC)" style="padding:10px 8px; color:#6b7280; white-space:nowrap;">{reminder.ReminderTime:HH:mm}</td>
-              <td data-label="Your local time" class="local-time" data-utc="{isoUtc}" style="padding:10px 8px; color:#6b7280; white-space:nowrap;">–</td>
-              <td data-label="Medicine" style="padding:10px 8px;">{WebUtility.HtmlEncode(reminder.MedicineName)}</td>
-              <td data-label="Description" style="padding:10px 8px; color:#6b7280;">{WebUtility.HtmlEncode(reminder.Description)}</td>
-              <td data-label="To" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.ReceiverEmail) ? "<span style=\"color:#9ca3af;\">default</span>" : WebUtility.HtmlEncode(reminder.ReceiverEmail))}</td>
-              <td data-label="Telegram" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.TelegramChatId) ? "<span style=\"color:#9ca3af;\">default</span>" : WebUtility.HtmlEncode(reminder.TelegramChatId))}</td>
+              <td data-label="Date" style="padding:10px 8px; color:#111827; font-weight:600; white-space:nowrap;">{istDate:yyyy-MM-dd}</td>
+              <td data-label="Time (IST)" style="padding:10px 8px; color:#6b7280; white-space:nowrap;">{istTime:HH:mm}</td>
+              <td data-label="Medicine" style="padding:10px 8px;">{encMedicine}</td>
+              <td data-label="Description" style="padding:10px 8px; color:#6b7280;">{encDescription}</td>
+              <td data-label="To" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.ReceiverEmail) ? "<span style=\"color:#9ca3af;\">default</span>" : encEmail)}</td>
+              <td data-label="Telegram" style="padding:10px 8px; color:#6b7280;">{(string.IsNullOrWhiteSpace(reminder.TelegramChatId) ? "<span style=\"color:#9ca3af;\">default</span>" : encChatId)}</td>
               <td data-label="Status" style="padding:10px 8px; white-space:nowrap;">{badge}</td>
-              <td style="padding:10px 8px; text-align:right;">
-                <form method="post" action="/reminders/{index}/delete" onsubmit="return confirm('Delete this reminder?');">
+              <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
+                <button type="button" class="icon-btn" style="background:#e0e7ff; color:#3730a3;"
+                  data-index="{index}"
+                  data-description="{encDescription}"
+                  data-medicine="{encMedicine}"
+                  data-message="{encMessage}"
+                  data-date="{istDate:yyyy-MM-dd}"
+                  data-time="{istTime:HH:mm}"
+                  data-email="{encEmail}"
+                  data-chatid="{encChatId}"
+                  onclick="startEdit(this)">✏️ Edit</button>
+                <form method="post" action="/reminders/{index}/delete" style="display:inline;" onsubmit="return confirm('Delete this reminder?');">
                   <button type="submit" class="icon-btn">🗑️ Delete</button>
                 </form>
               </td>
